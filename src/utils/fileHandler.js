@@ -1,3 +1,9 @@
+// 파일명에서 확장자 제거
+const removeFileExtension = (filename) => {
+  if (!filename) return filename
+  return filename.replace(/\.(zip|json)$/i, '')
+}
+
 export const validateJsonStructure = (jsonData, isOriginalFile = false) => {
   const errors = []
   
@@ -248,14 +254,15 @@ const processDlcZipFile = async (file, index) => {
         if (jsonFile.path.toLowerCase() === 'lorebook_export.json') {
           try {
             const risuDlcs = parseRisuExport(jsonData)
+            const fileNameWithoutExt = removeFileExtension(file.name)
             risuDlcs.forEach((risuDlc, risuIndex) => {
               const dlcItemObj = {
                 id: `dlc-${Date.now()}-${index}-${jsonFile.path}-risu-${risuIndex}`,
-                name: `${file.name}/${risuDlc.name || `항목 ${risuIndex + 1}`}`,
+                name: `${fileNameWithoutExt}/${risuDlc.name || `항목 ${risuIndex + 1}`}`,
                 section: risuDlc.section,
                 data: {
                   ...risuDlc,
-                  name: `${file.name}/${risuDlc.name || `항목 ${risuIndex + 1}`}`
+                  name: `${fileNameWithoutExt}/${risuDlc.name || `항목 ${risuIndex + 1}`}`
                 },
                 selected: false
               }
@@ -266,17 +273,18 @@ const processDlcZipFile = async (file, index) => {
           }
         } else {
           // 일반 DLC 형식 처리
+          const fileNameWithoutExt = removeFileExtension(file.name)
           dlcArray.forEach((dlcItem, dlcIndex) => {
             const validation = validateJsonStructure(dlcItem, false)
-            
+
             if (validation.isValid) {
               const dlcItemObj = {
                 id: `dlc-${Date.now()}-${index}-${jsonFile.path}-${dlcIndex}`,
-                name: `${file.name}/${dlcItem.name || jsonFile.path}${dlcArray.length > 1 ? `[${dlcIndex}]` : ''}`,
+                name: `${fileNameWithoutExt}/${dlcItem.name || jsonFile.path}${dlcArray.length > 1 ? `[${dlcIndex}]` : ''}`,
                 section: dlcItem.section,
                 data: {
                   ...dlcItem,
-                  name: `${file.name}/${dlcItem.name || jsonFile.path}${dlcArray.length > 1 ? `[${dlcIndex}]` : ''}`
+                  name: `${fileNameWithoutExt}/${dlcItem.name || jsonFile.path}${dlcArray.length > 1 ? `[${dlcIndex}]` : ''}`
                 },
                 selected: false
               }
@@ -302,8 +310,9 @@ const processDlcZipFile = async (file, index) => {
     const hasAssetJson = jsonFiles.some(jsonFile => jsonFile.path.toLowerCase().includes('asset'))
     if (!hasAssetJson && assetFiles.length > 0) {
       try {
+        const fileNameWithoutExt = removeFileExtension(file.name)
         const autoAssetDlc = {
-          name: `${file.name}/에셋 팩`,
+          name: `${fileNameWithoutExt}/에셋 팩`,
           section: "asset", 
           content: assetFiles.map((assetFile) => {
             // 파일명에서 확장자 제거하여 에셋명 생성
@@ -377,14 +386,15 @@ export const processDlcFiles = async (files) => {
         if (file.name.toLowerCase() === 'lorebook_export.json') {
           try {
             const risuDlcs = parseRisuExport(jsonData)
+            const fileNameWithoutExt = removeFileExtension(file.name)
             risuDlcs.forEach((risuDlc, risuIndex) => {
               results.push({
                 id: `dlc-${Date.now()}-${i}-risu-${risuIndex}`,
-                name: `${file.name}/${risuDlc.name || `항목 ${risuIndex + 1}`}`,
+                name: `${fileNameWithoutExt}/${risuDlc.name || `항목 ${risuIndex + 1}`}`,
                 section: risuDlc.section,
                 data: {
                   ...risuDlc,
-                  name: `${file.name}/${risuDlc.name || `항목 ${risuIndex + 1}`}`
+                  name: `${fileNameWithoutExt}/${risuDlc.name || `항목 ${risuIndex + 1}`}`
                 },
                 selected: false
               })
@@ -395,18 +405,19 @@ export const processDlcFiles = async (files) => {
         } else {
           // 일반 DLC 형식 처리
           const dlcArray = Array.isArray(jsonData) ? jsonData : [jsonData]
-          
+          const fileNameWithoutExt = removeFileExtension(file.name)
+
           dlcArray.forEach((dlcItem, dlcIndex) => {
             const validation = validateJsonStructure(dlcItem, false)
-            
+
             if (validation.isValid) {
               results.push({
                 id: `dlc-${Date.now()}-${i}-${dlcIndex}`,
-                name: `${file.name}/${dlcItem.name || `항목 ${dlcIndex + 1}`}`,
+                name: `${fileNameWithoutExt}/${dlcItem.name || `항목 ${dlcIndex + 1}`}`,
                 section: dlcItem.section,
                 data: {
                   ...dlcItem,
-                  name: `${file.name}/${dlcItem.name || `항목 ${dlcIndex + 1}`}`
+                  name: `${fileNameWithoutExt}/${dlcItem.name || `항목 ${dlcIndex + 1}`}`
                 },
                 selected: false
               })

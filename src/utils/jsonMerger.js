@@ -375,7 +375,7 @@ export const downloadCharxFile = async (data, filename, selectedDlcs = [], origi
       
       const charxFilename = filename.endsWith('.charx') ? filename : filename.replace(/\.json$/, '.charx')
       const url = URL.createObjectURL(new Blob([repackResult.buffer], { type: 'application/zip' }))
-      
+
       const link = document.createElement('a')
       link.href = url
       link.download = charxFilename
@@ -383,7 +383,26 @@ export const downloadCharxFile = async (data, filename, selectedDlcs = [], origi
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
-      
+
+      // 별도의 module.risum 파일 다운로드 (content 제거)
+      const { packEmptyContentRisum } = await import('./risumHandler.js')
+      const emptyRisumResult = await packEmptyContentRisum(data.risuModule)
+
+      if (emptyRisumResult.success) {
+        const risumFilename = charxFilename.replace(/\.charx$/, '') + '_module.risum'
+        const risumUrl = URL.createObjectURL(new Blob([emptyRisumResult.buffer], { type: 'application/octet-stream' }))
+
+        const risumLink = document.createElement('a')
+        risumLink.href = risumUrl
+        risumLink.download = risumFilename
+        document.body.appendChild(risumLink)
+        risumLink.click()
+        document.body.removeChild(risumLink)
+        URL.revokeObjectURL(risumUrl)
+      } else {
+        console.warn('별도 risum 파일 생성 실패:', emptyRisumResult.error)
+      }
+
       return { success: true }
     }
     

@@ -1,12 +1,5 @@
 import { getSectionDisplayName, getSectionIcon } from '../utils/fileHandler'
 
-// 파일명에서 확장자 제거 유틸리티 함수
-const removeFileExtension = (filename) => {
-  if (!filename) return filename
-  // .zip 확장자만 제거
-  return filename.replace(/\.zip$/i, '')
-}
-
 const DlcItem = ({ dlc, onToggle }) => {
   const getSectionBadgeColor = (section) => {
     const colors = {
@@ -36,15 +29,15 @@ const DlcItem = ({ dlc, onToggle }) => {
           <div className="flex items-center gap-2 mb-2">
             <span className="text-lg">{getSectionIcon(dlc.section)}</span>
             <h3 className="font-medium text-gray-900 truncate">
-              {dlc.data.name || removeFileExtension(dlc.name)}
+              {dlc.data.name || dlc.name}
             </h3>
             <span className={`text-xs px-2 py-1 rounded-full ${getSectionBadgeColor(dlc.section)}`}>
               {getSectionDisplayName(dlc.section)}
             </span>
           </div>
-          
+
           <p className="text-sm text-gray-600 mb-2">
-            파일: {removeFileExtension(dlc.name)}
+            파일: {dlc.name}
           </p>
           
           {dlc.section === 'lorebook' && dlc.data.keys && dlc.data.keys.length > 0 && (
@@ -149,7 +142,7 @@ const DlcList = ({
                 </div>
                 <div className="col-span-5 flex items-center text-sm">
                   <span className="truncate text-white">
-                    {dlc.data.name || removeFileExtension(dlc.name)}
+                    {dlc.data.name || dlc.name}
                   </span>
                 </div>
                 <div className="col-span-3 flex items-center text-sm">

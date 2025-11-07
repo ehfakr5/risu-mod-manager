@@ -4,13 +4,6 @@ import { processDlcFiles, readFileAsJson } from './utils/fileHandler'
 import { mergeDlcsIntoOriginal, validateMergeResult, downloadCharxFile } from './utils/jsonMerger'
 import { extractAndDownloadDlc } from './utils/extractorUtils'
 
-// 파일명에서 확장자 제거 유틸리티 함수
-const removeFileExtension = (filename) => {
-  if (!filename) return filename
-  // .zip 확장자만 제거
-  return filename.replace(/\.zip$/i, '')
-}
-
 const MasterCheckbox = ({ dlcFiles, currentSection, onSelectAll, onDeselectAll }) => {
   const checkboxRef = useRef(null)
   
@@ -857,7 +850,7 @@ function App() {
                 {dlcFiles.filter(dlc => dlc.selected).length > 0 ? (
                   dlcFiles.filter(dlc => dlc.selected).map((dlc) => (
                     <div key={dlc.id} className="grid grid-cols-12 gap-4 px-4 py-2 border-b border-gray-700 text-sm bg-gray-800">
-                      <div className="col-span-7 truncate text-white">{dlc.data.name || removeFileExtension(dlc.name)}</div>
+                      <div className="col-span-7 truncate text-white">{dlc.data.name || dlc.name}</div>
                       <div className="col-span-3 text-gray-300">
                         {dlc.section === 'lorebook' ? '로어북' :
                          dlc.section === 'asset' ? '에셋' :

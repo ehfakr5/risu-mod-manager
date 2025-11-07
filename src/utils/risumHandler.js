@@ -259,11 +259,11 @@ export const extractModuleFromCharx = async (zipData) => {
 // lorebook DLC를 module.json의 lorebook 배열에 병합
 export const mergeLorebooks = (originalModule, lorebookDlcs) => {
   const mergedModule = JSON.parse(JSON.stringify(originalModule)) // 깊은 복사
-  
+
   if (!mergedModule.lorebook) {
     mergedModule.lorebook = []
   }
-  
+
   lorebookDlcs.forEach(dlc => {
     const lorebookEntry = {
       key: dlc.key || (dlc.keys ? dlc.keys.join(', ') : ''),
@@ -294,15 +294,15 @@ export const repackCharxWithMergedModule = async (originalZipData, mergedModule,
   try {
     // 병합된 모듈을 risum으로 패킹
     const packResult = await packToRisum(mergedModule, originalAssets)
-    
+
     if (!packResult.success) {
       return packResult
     }
-    
+
     // 새로운 ZIP 생성 (기존 파일들 복사)
     const JSZip = await import('jszip')
     const newZip = new JSZip.default()
-    
+
     // 기존 파일들 복사 (module.risum 제외)
     const copyPromises = []
     originalZipData.forEach((relativePath, zipEntry) => {
@@ -314,21 +314,61 @@ export const repackCharxWithMergedModule = async (originalZipData, mergedModule,
         )
       }
     })
-    
+
     await Promise.all(copyPromises)
-    
+
     // 새로운 module.risum 추가
     newZip.file('module.risum', packResult.buffer)
-    
+
     // ZIP 생성
     const newCharxBuffer = await newZip.generateAsync({ type: 'uint8array' })
-    
+
     return {
       success: true,
       buffer: newCharxBuffer
     }
   } catch (error) {
     console.error('Charx 재패킹 실패:', error)
+    return {
+      success: false,
+      error: error.message
+    }
+  }
+}
+
+// 모듈에서 content를 제거한 버전 생성 (이미지 제외)
+export const createEmptyContentModule = (module) => {
+  const emptyModule = JSON.parse(JSON.stringify(module)) // 깊은 복사
+
+  // lorebook 엔트리의 content를 빈 문자열로 변경
+  if (emptyModule.lorebook && Array.isArray(emptyModule.lorebook)) {
+    emptyModule.lorebook.forEach(entry => {
+      if (entry.content) {
+        entry.content = ''
+      }
+    })
+  }
+
+  return emptyModule
+}
+
+// content가 제거된 모듈을 별도의 risum 파일로 패킹
+export const packEmptyContentRisum = async (module) => {
+  try {
+    const emptyModule = createEmptyContentModule(module)
+    // 이미지 없이 패킹 (assets 빈 배열)
+    const packResult = await packToRisum(emptyModule, [])
+
+    if (!packResult.success) {
+      return packResult
+    }
+
+    return {
+      success: true,
+      buffer: packResult.buffer
+    }
+  } catch (error) {
+    console.error('빈 content risum 패킹 실패:', error)
     return {
       success: false,
       error: error.message
