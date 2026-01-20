@@ -82,6 +82,7 @@ coverage/
 .history/
 .vscode/launch.json
 .vscode/tasks.
+.claude
 
 PROJECT_PLAN.md
 CLAUDE.md
