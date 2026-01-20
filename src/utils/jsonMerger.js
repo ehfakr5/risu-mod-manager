@@ -358,10 +358,11 @@ const replaceSlotInJsonMutating = (obj, slotname, replacement) => {
 }
 
 // 사용되지 않은 슬롯 제거 함수
-// <<slotname>> 또는 [[slotname]] 형식의 슬롯 패턴을 찾아서 제거 (공백 포함 가능, 줄바꿈 제외)
+// <<slotname>> 형식의 슬롯 패턴을 찾아서 제거 (공백 포함 가능, 줄바꿈 제외)
+// 참고: [[...]] 형식은 Lua 멀티라인 문자열 문법과 충돌하므로 제외
 const removeUnusedSlots = (obj) => {
-    // 슬롯 패턴: <<...>> 또는 [[...]] 형식, 공백 포함 가능, 줄바꿈 제외
-    const slotPattern = /<<[^<>\n]+>>|\[\[[^\[\]\n]+\]\]/g
+    // 슬롯 패턴: <<...>> 형식만 처리 (공백 포함 가능, 줄바꿈 제외)
+    const slotPattern = /<<[^<>\n]+>>/g
 
     if (Array.isArray(obj)) {
         for (let i = 0; i < obj.length; i++) {
@@ -807,6 +808,16 @@ export const downloadCharxFile = async (data, filename, selectedMods = [], origi
                 regex: regexEntries,
                 backgroundEmbedding: finalEmbedding,
                 customModuleToggle: customModuleToggle
+            }
+
+            // risuModule에 슬롯 치환 적용 (<<lua>> content 안의 슬롯 처리)
+            const regularSlotMods = slotMods.filter(mod =>
+                mod.data.slotname !== '<<lua>>' &&
+                mod.data.slotname !== '<<toggle>>' &&
+                mod.data.slotname !== '<<embedding>>'
+            )
+            if (regularSlotMods.length > 0) {
+                mergeSlots(risuModule, regularSlotMods)
             }
 
             // module.risum 패킹 및 추가
