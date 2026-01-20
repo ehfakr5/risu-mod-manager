@@ -1,92 +1,96 @@
 {
-  "name": "risu-mod-manager",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "main": "public/electron.cjs",
-  "homepage": "./",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
-    "preview": "vite preview",
-    "electron": "electron .",
-    "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
-    "build-electron": "npm run build && electron-builder",
-    "dist": "npm run build && electron-builder --publish=never"
-  },
-  "dependencies": {
-    "@tailwindcss/postcss": "^4.1.11",
-    "@tailwindcss/vite": "^4.1.11",
-    "jszip": "^3.10.1",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "tailwindcss": "^4.1.11"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.30.1",
-    "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
-    "@vitejs/plugin-react": "^4.6.0",
-    "autoprefixer": "^10.4.21",
-    "concurrently": "^9.2.0",
-    "electron": "^37.2.5",
-    "electron-builder": "^26.0.12",
-    "eslint": "^9.30.1",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-react-refresh": "^0.4.20",
-    "globals": "^16.3.0",
-    "postcss": "^8.5.6",
-    "vite": "^7.2.2",
-    "wait-on": "^8.0.4"
-  },
-  "build": {
-    "appId": "com.risuai.mod-manager",
-    "productName": "Risu Mod Manager",
-    "directories": {
-      "output": "dist-electron"
+    "name": "risu-mod-manager",
+    "private": true,
+    "version": "0.0.0",
+    "description": "A mod manager for RisuAI character cards",
+    "author": "노예였던것",
+    "type": "module",
+    "main": "public/electron.cjs",
+    "homepage": "./",
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build",
+        "lint": "eslint .",
+        "preview": "vite preview",
+        "electron": "electron .",
+        "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
+        "build-electron": "npm run build && electron-builder",
+        "build:win": "npm run build && electron-builder --win && cd dist-electron && zip -r \"Risu-Mod-Manager-$(node -p \"require('../package.json').version\")-win-x64.zip\" win-unpacked",
+        "build:mac": "npm run build && electron-builder --mac && cd dist-electron && for dir in mac mac-arm64 mac-universal; do [ -d \"$dir\" ] && zip -r \"Risu-Mod-Manager-$(node -p \"require('../package.json').version\")-${dir}.zip\" \"$dir\"; done",
+        "dist": "npm run build && electron-builder --publish=never"
     },
-    "files": [
-      "dist/**/*",
-      "public/electron.cjs",
-      "node_modules/**/*"
-    ],
-    "mac": {
-      "category": "public.app-category.utilities",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
+    "dependencies": {
+        "@tailwindcss/postcss": "^4.1.11",
+        "@tailwindcss/vite": "^4.1.11",
+        "jszip": "^3.10.1",
+        "react": "^19.1.0",
+        "react-dom": "^19.1.0",
+        "tailwindcss": "^4.1.11"
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.30.1",
+        "@types/react": "^19.1.8",
+        "@types/react-dom": "^19.1.6",
+        "@vitejs/plugin-react": "^4.6.0",
+        "autoprefixer": "^10.4.21",
+        "concurrently": "^9.2.0",
+        "electron": "^37.2.5",
+        "electron-builder": "^26.0.12",
+        "eslint": "^9.30.1",
+        "eslint-plugin-react-hooks": "^5.2.0",
+        "eslint-plugin-react-refresh": "^0.4.20",
+        "globals": "^16.3.0",
+        "postcss": "^8.5.6",
+        "vite": "^7.2.2",
+        "wait-on": "^8.0.4"
+    },
+    "build": {
+        "appId": "com.risuai.mod-manager",
+        "productName": "Risu Mod Manager",
+        "directories": {
+            "output": "dist-electron"
+        },
+        "files": [
+            "dist/**/*",
+            "public/electron.cjs",
+            "node_modules/**/*"
+        ],
+        "mac": {
+            "category": "public.app-category.utilities",
+            "target": [
+                {
+                    "target": "dir",
+                    "arch": [
+                        "x64",
+                        "arm64"
+                    ]
+                }
+            ]
+        },
+        "win": {
+            "target": [
+                {
+                    "target": "dir",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ],
+            "signAndEditExecutable": false
+        },
+        "linux": {
+            "target": [
+                {
+                    "target": "AppImage",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ]
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true
         }
-      ]
-    },
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "sign": false
-    },
-    "linux": {
-      "target": [
-        {
-          "target": "AppImage",
-          "arch": [
-            "x64"
-          ]
-        }
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
     }
-  }
 }
