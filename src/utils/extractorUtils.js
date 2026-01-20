@@ -1,40 +1,66 @@
-export const extractAndDownloadDlc = async (originalJson, selectedItemIds, filename) => {
+export const extractAndDownloadMod = async (originalJson, selectedItemIds, filename) => {
   try {
     const JSZip = await import('jszip')
     const zip = new JSZip.default()
-    
+
+    const isRisuModule = originalJson.isRisuModule
     const isV3Format = originalJson.data.spec === 'chara_card_v3' && originalJson.data.data
     const dataRoot = isV3Format ? originalJson.data.data : originalJson.data
-    
+
     let lorebookEntries = []
     let assetEntries = []
-    
+    let regexEntries = []
+
     // 선택된 항목들을 분류하고 추출
     selectedItemIds.forEach(itemId => {
-      const [type, index] = itemId.split('-')
-      const idx = parseInt(index)
-      
-      if (type === 'lorebook' && dataRoot.character_book?.entries?.[idx]) {
-        const entry = dataRoot.character_book.entries[idx]
-        lorebookEntries.push({
-          entry,
-          originalIndex: idx
-        })
-      } else if (type === 'asset' && dataRoot.assets) {
-        const assets = dataRoot.assets.filter(asset => asset.type === 'x-risu-asset')
-        if (assets[idx]) {
-          assetEntries.push({
-            asset: assets[idx],
+      const parts = itemId.split('-')
+
+      if (isRisuModule) {
+        // RisuAI 모듈 처리
+        if (parts[0] === 'risu' && parts[1] === 'lorebook') {
+          const idx = parseInt(parts[2])
+          if (originalJson.data.risuModule?.lorebook?.[idx]) {
+            lorebookEntries.push({
+              entry: originalJson.data.risuModule.lorebook[idx],
+              originalIndex: idx
+            })
+          }
+        } else if (parts[0] === 'risu' && parts[1] === 'regex') {
+          const idx = parseInt(parts[2])
+          if (originalJson.data.risuModule?.regex?.[idx]) {
+            regexEntries.push({
+              entry: originalJson.data.risuModule.regex[idx],
+              originalIndex: idx
+            })
+          }
+        }
+      } else {
+        // 일반 캐릭터 카드 처리
+        const [type, index] = parts
+        const idx = parseInt(index)
+
+        if (type === 'lorebook' && dataRoot.character_book?.entries?.[idx]) {
+          const entry = dataRoot.character_book.entries[idx]
+          lorebookEntries.push({
+            entry,
             originalIndex: idx
           })
+        } else if (type === 'asset' && dataRoot.assets) {
+          const assets = dataRoot.assets.filter(asset => asset.type === 'x-risu-asset')
+          if (assets[idx]) {
+            assetEntries.push({
+              asset: assets[idx],
+              originalIndex: idx
+            })
+          }
         }
       }
     })
     
-    // 로어북 DLC들을 개별로 생성 (배열 형식)
+    // 로어북 mod들을 개별로 생성 (배열 형식)
     if (lorebookEntries.length > 0) {
-      const lorebookDlcs = lorebookEntries.map(({ entry, originalIndex }) => ({
-        name: entry.name || `로어북 엔트리 ${originalIndex + 1}`,
+      const lorebookMods = lorebookEntries.map(({ entry, originalIndex }) => ({
+        name: entry.comment || entry.name || `로어북 엔트리 ${originalIndex + 1}`,
         section: "lorebook",
         keys: entry.keys || [],
         content: entry.content || "",
@@ -46,20 +72,20 @@ export const extractAndDownloadDlc = async (originalJson, selectedItemIds, filen
         insertion_order: entry.insertion_order || 10,
         constant: entry.constant !== undefined ? entry.constant : true,
         selective: entry.selective !== undefined ? entry.selective : false,
-        comment: entry.comment || `원본에서 추출된 로어북 엔트리`,
+        comment: entry.comment || entry.name || `원본에서 추출된 로어북 엔트리`,
         case_sensitive: entry.case_sensitive !== undefined ? entry.case_sensitive : false,
         use_regex: entry.use_regex !== undefined ? entry.use_regex : false
       }))
-      
-      zip.file('lorebook.json', JSON.stringify(lorebookDlcs, null, 2))
+
+      zip.file('lorebook.json', JSON.stringify(lorebookMods, null, 2))
     }
     
-    // 에셋 DLC들을 개별로 생성 (배열 형식)
+    // 에셋 mod들을 개별로 생성 (배열 형식)
     if (assetEntries.length > 0) {
       // assets 폴더 생성
       const assetsFolder = zip.folder('assets')
-      
-      const assetDlcs = assetEntries.map(({ asset, originalIndex }) => {
+
+      const assetMods = assetEntries.map(({ asset, originalIndex }) => {
         // 파일명에서 확장자 추출
         const originalUri = asset.uri || ''
         const extension = asset.ext || 'png'
@@ -90,15 +116,31 @@ export const extractAndDownloadDlc = async (originalJson, selectedItemIds, filen
           }]
         }
       })
-      
-      zip.file('asset.json', JSON.stringify(assetDlcs, null, 2))
+
+      zip.file('asset.json', JSON.stringify(assetMods, null, 2))
     }
     
-    // 에셋이 없는 경우에도 빈 asset.json을 생성 (dlcpack 표준 구조)
-    if (assetEntries.length === 0) {
+    // Regex mod 생성
+    if (regexEntries.length > 0) {
+      const regexMod = {
+        type: "regex",
+        data: regexEntries.map(({ entry, originalIndex }) => ({
+          comment: entry.comment || `원본에서 추출된 정규식 ${originalIndex + 1}`,
+          in: entry.in || "",
+          out: entry.out || "",
+          type: entry.type || "normal",
+          ableFlag: entry.ableFlag !== undefined ? entry.ableFlag : true
+        }))
+      }
+
+      zip.file('regex.json', JSON.stringify(regexMod, null, 2))
+    }
+
+    // 에셋이 없는 경우에도 빈 asset.json을 생성 (modpack 표준 구조)
+    if (assetEntries.length === 0 && !isRisuModule) {
       zip.file('asset.json', JSON.stringify([], null, 2))
     }
-    
+
     // ZIP 파일 생성 및 다운로드
     const zipBlob = await zip.generateAsync({ type: 'blob' })
     
@@ -113,9 +155,9 @@ export const extractAndDownloadDlc = async (originalJson, selectedItemIds, filen
     
     return { success: true }
   } catch (error) {
-    return { 
-      success: false, 
-      error: `DLC 추출 오류: ${error.message}` 
+    return {
+      success: false,
+      error: `mod 추출 오류: ${error.message}`
     }
   }
 }

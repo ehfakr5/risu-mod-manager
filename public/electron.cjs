@@ -114,7 +114,7 @@ function createMenu() {
               type: 'info',
               title: 'About',
               message: 'Risu Mod Manager',
-              detail: 'A tool for managing RisuAI character mods and DLCs.\n\nVersion: 1.0.0'
+              detail: 'A tool for managing RisuAI character mods.\n\nVersion: 1.0.0'
             });
           }
         }

@@ -158,12 +158,8 @@ const initPacker = async () => {
         // Electron 환경에서는 public 폴더의 파일 직접 접근
         wasmPath = './rpack.wasm'
       }
-      
-      console.log('WASM 파일 로딩 시도:', wasmPath)
-      console.log('현재 환경:', isElectron() ? 'Electron' : 'Browser')
-      
+
       packerInstance = await BrowserRisuPacker.create(wasmPath)
-      console.log('WASM 파일 로딩 성공')
     } catch (error) {
       console.error('RisuPacker 초기화 실패:', error)
       console.error('Error details:', {
@@ -256,36 +252,88 @@ export const extractModuleFromCharx = async (zipData) => {
   }
 }
 
-// lorebook DLC를 module.json의 lorebook 배열에 병합
-export const mergeLorebooks = (originalModule, lorebookDlcs) => {
+// UUID 생성 함수
+const generateUUID = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID()
+  }
+  // fallback
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0
+    const v = c === 'x' ? r : (r & 0x3 | 0x8)
+    return v.toString(16)
+  })
+}
+
+// lorebook mod를 module.json의 lorebook 배열에 병합
+export const mergeLorebooks = (originalModule, lorebookMods) => {
   const mergedModule = JSON.parse(JSON.stringify(originalModule)) // 깊은 복사
 
   if (!mergedModule.lorebook) {
     mergedModule.lorebook = []
   }
 
-  lorebookDlcs.forEach(dlc => {
-    const lorebookEntry = {
-      key: dlc.key || (dlc.keys ? dlc.keys.join(', ') : ''),
-      comment: dlc.comment || dlc.name || '',
-      content: dlc.content || '',
-      mode: dlc.mode || 'normal',
-      insertorder: dlc.insertorder || dlc.insertion_order || 10,
-      alwaysActive: dlc.alwaysActive !== undefined ? dlc.alwaysActive : (dlc.enabled !== false),
-      secondkey: dlc.secondkey || '',
-      selective: dlc.selective === true,
-      useRegex: dlc.use_regex === true,
-      bookVersion: dlc.bookVersion || 2
+  // mod들을 zip 파일별로 그룹화
+  const modGroups = {}
+  lorebookMods.forEach(modObj => {
+    let zipFileName = ''
+    if (modObj.name) {
+      const parts = modObj.name.split('/')
+      zipFileName = parts[0]
     }
-    
-    // folder 필드가 있으면 추가
-    if (dlc.folder) {
-      lorebookEntry.folder = dlc.folder
+    if (!modGroups[zipFileName]) {
+      modGroups[zipFileName] = []
     }
-    
-    mergedModule.lorebook.push(lorebookEntry)
+    modGroups[zipFileName].push(modObj)
   })
-  
+
+  // 각 그룹별로 폴더 생성 및 로어북 항목 추가
+  Object.entries(modGroups).forEach(([zipFileName, mods]) => {
+    // 폴더 UUID 생성
+    const folderKey = `\uf000folder:${generateUUID()}`
+
+    // 폴더 항목 생성
+    const folderEntry = {
+      key: folderKey,
+      comment: zipFileName,
+      content: '',
+      mode: 'folder',
+      insertorder: 100,
+      alwaysActive: false,
+      secondkey: '',
+      selective: false,
+      bookVersion: 2
+    }
+    mergedModule.lorebook.push(folderEntry)
+
+    // 그룹 내 각 mod의 로어북 항목 추가
+    mods.forEach(modObj => {
+      const mod = modObj.data || modObj  // data 필드가 있으면 사용, 없으면 전체 객체 사용
+
+      // content를 토글 문법으로 감싸기
+      let content = mod.content || ''
+      if (zipFileName && content) {
+        content = `{{#if {{? {{getglobalvar::toggle_${zipFileName}}}=1}}}}${content}{{/if}}`
+      }
+
+      const lorebookEntry = {
+        key: mod.key || (mod.keys ? mod.keys.join(', ') : ''),
+        comment: mod.comment || mod.name || '',
+        content: content,
+        mode: mod.mode || 'normal',
+        insertorder: mod.insertorder || mod.insertion_order || 10,
+        alwaysActive: mod.alwaysActive !== undefined ? mod.alwaysActive : (mod.enabled !== false),
+        secondkey: mod.secondkey || '',
+        selective: mod.selective === true,
+        useRegex: mod.use_regex === true,
+        bookVersion: mod.bookVersion || 2,
+        folder: folderKey  // 폴더 연결
+      }
+
+      mergedModule.lorebook.push(lorebookEntry)
+    })
+  })
+
   return mergedModule
 }
 
