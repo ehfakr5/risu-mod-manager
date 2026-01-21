@@ -71,6 +71,44 @@ const calculateRemovedItems = (mods, originalItems = []) => {
     return removedItems
 }
 
+// 프로그레스 바 모달 컴포넌트
+const ProgressModal = ({ isOpen, progress, status }) => {
+    if (!isOpen) return null
+
+    return (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+            <div className="bg-gray-800 rounded-xl border border-gray-700 p-6 w-96 shadow-2xl">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center animate-pulse">
+                        <svg className="w-6 h-6 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-semibold text-white">병합 및 내보내기</h3>
+                        <p className="text-sm text-gray-400">잠시만 기다려주세요...</p>
+                    </div>
+                </div>
+
+                {/* 프로그레스 바 */}
+                <div className="mb-3">
+                    <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
+                        <div
+                            className="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full transition-all duration-300 ease-out"
+                            style={{ width: `${progress}%` }}
+                        />
+                    </div>
+                    <div className="flex justify-between mt-1">
+                        <span className="text-xs text-gray-400">{status}</span>
+                        <span className="text-xs text-blue-400 font-medium">{progress}%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
 function App() {
     const [originalJson, setOriginalJson] = useState(null)
     const [modFiles, setModFiles] = useState([])
@@ -78,6 +116,11 @@ function App() {
     const [uploadErrors, setUploadErrors] = useState([])
     const [dragOver, setDragOver] = useState({ original: false, mod: false })
     const [selectedOriginalItems, setSelectedOriginalItems] = useState([])
+
+    // 프로그레스 바 상태
+    const [isExporting, setIsExporting] = useState(false)
+    const [exportProgress, setExportProgress] = useState(0)
+    const [exportStatus, setExportStatus] = useState('')
 
     const handleOriginalFileSelect = async (files) => {
         const file = files[0]
@@ -392,21 +435,53 @@ function App() {
             return
         }
 
+        // 프로그레스 바 시작
+        setIsExporting(true)
+        setExportProgress(0)
+        setExportStatus('준비 중...')
+
         try {
+            // 단계 1: 모드 준비
+            setExportProgress(10)
+            setExportStatus('모드 데이터 준비 중...')
+            await new Promise(resolve => setTimeout(resolve, 100)) // UI 업데이트를 위한 짧은 딜레이
+
             // 원본 항목들과 선택된 mod들을 병합
             const allMods = [...(originalJson.originalItems || []), ...modFiles.filter(mod => mod.selected && !mod.isRemoved)]
+
+            // 단계 2: 병합 진행
+            setExportProgress(30)
+            setExportStatus('모드 병합 중...')
+            await new Promise(resolve => setTimeout(resolve, 100))
+
             const mergedData = await mergeModsIntoOriginal(originalJson.data, allMods)
+
+            // 단계 3: 검증
+            setExportProgress(50)
+            setExportStatus('병합 결과 검증 중...')
+            await new Promise(resolve => setTimeout(resolve, 100))
 
             const validation = validateMergeResult(mergedData)
             if (!validation.isValid) {
                 setUploadErrors([`병합 검증 실패: ${validation.errors.join(', ')}`])
+                setIsExporting(false)
                 return
             }
+
+            // 단계 4: 파일 생성
+            setExportProgress(70)
+            setExportStatus('CHARX 파일 생성 중...')
+            await new Promise(resolve => setTimeout(resolve, 100))
 
             // 파일명 생성
             const originalName = originalJson.name.replace(/\.(json|charx)$/, '')
             const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')
             const filename = `${originalName}_mod_${timestamp}.charx`
+
+            // 단계 5: 다운로드
+            setExportProgress(90)
+            setExportStatus('파일 다운로드 준비 중...')
+            await new Promise(resolve => setTimeout(resolve, 100))
 
             const downloadResult = await downloadCharxFile(
                 mergedData,
@@ -416,6 +491,12 @@ function App() {
                 originalJson.originalRisumBuffer,
                 originalJson.risumAssets
             )
+
+            // 완료
+            setExportProgress(100)
+            setExportStatus('완료!')
+            await new Promise(resolve => setTimeout(resolve, 300))
+
             if (downloadResult.success) {
                 setUploadErrors([])
                 alert(`✅ 병합 완료! ${selectedModsCount}개 모드가 적용되어 다운로드되었습니다.`)
@@ -424,11 +505,22 @@ function App() {
             }
         } catch (error) {
             setUploadErrors([`병합 오류: ${error.message}`])
+        } finally {
+            setIsExporting(false)
+            setExportProgress(0)
+            setExportStatus('')
         }
     }
 
     return (
         <div className="min-h-screen bg-gray-900 p-6">
+            {/* 프로그레스 바 모달 */}
+            <ProgressModal
+                isOpen={isExporting}
+                progress={exportProgress}
+                status={exportStatus}
+            />
+
             <div className="max-w-6xl mx-auto">
                 {/* Header */}
                 <div className="text-center mb-8">
