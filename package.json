@@ -1,7 +1,7 @@
 {
     "name": "risu-mod-manager",
     "private": true,
-    "version": "0.0.0",
+    "version": "0.0.3",
     "description": "A mod manager for RisuAI character cards",
     "author": "노예였던것",
     "type": "module",
