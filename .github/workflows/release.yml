@@ -1,0 +1,135 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 0.0.4)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Electron app
+        run: npm run build && npx electron-builder --win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create portable zip
+        shell: pwsh
+        run: |
+          $version = if ("${{ github.event.inputs.version }}") { "${{ github.event.inputs.version }}" } else { (Get-Content package.json | ConvertFrom-Json).version }
+          Compress-Archive -Path "dist-electron/win-unpacked/*" -DestinationPath "dist-electron/Risu-Mod-Manager-${version}-win-x64-portable.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: dist-electron/Risu-Mod-Manager-*-win-x64-portable.zip
+
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Electron app
+        run: npm run build && npx electron-builder --mac --${{ matrix.arch }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}-build
+          path: dist-electron/*.dmg
+
+  release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Rename artifacts (replace spaces with underscores)
+        run: |
+          find artifacts -depth -name "* *" -exec bash -c 'mv "$1" "${1// /_}"' _ {} \;
+
+      - name: Flatten artifacts and Remove Duplicates
+        run: |
+          mkdir -p artifacts_final
+          find artifacts -type f -exec cp -f {} artifacts_final/ \;
+          echo "Final artifacts list:"
+          ls -lh artifacts_final/
+
+      - name: Create and push tag (manual trigger only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ github.event.inputs.version }}" -m "Release v${{ github.event.inputs.version }}"
+          git push origin "v${{ github.event.inputs.version }}"
+
+      - name: Create Release
+        run: |
+          VERSION="v${{ steps.version.outputs.version }}"
+
+          # Delete existing release if it exists to avoid conflicts
+          gh release delete "$VERSION" --yes || true
+
+          # Create release with gh CLI
+          gh release create "$VERSION" \
+            --title "Release $VERSION" \
+            --generate-notes \
+            artifacts_final/*
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

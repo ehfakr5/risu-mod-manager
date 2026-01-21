@@ -59,7 +59,7 @@
             "category": "public.app-category.utilities",
             "target": [
                 {
-                    "target": "dir",
+                    "target": "dmg",
                     "arch": [
                         "x64",
                         "arm64"
