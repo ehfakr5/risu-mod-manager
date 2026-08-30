@@ -625,7 +625,8 @@ export const downloadCharxFile = async (data, filename, selectedMods = [], origi
                                 "code": finalLuaCode
                             }
                         ],
-                        "lowLevelAccess": false
+                        // 원본 트리거의 lowLevelAccess 승계 (axLLM/LLM 등 low-level API 사용 모듈 보존)
+                        "lowLevelAccess": data.risuModule?.trigger?.[0]?.lowLevelAccess ?? false
                     }
                 ],
                 regex: [...(data.risuModule.regex || []), ...regexEntries],
@@ -636,6 +637,9 @@ export const downloadCharxFile = async (data, filename, selectedMods = [], origi
             if (regularSlotMods.length > 0) {
                 mergeSlots(charxModule, regularSlotMods)
             }
+
+            // 채워지지 않은 슬롯 제거 (Lua 코드 내 리터럴 슬롯 잔존 방지)
+            removeUnusedSlots(charxModule)
 
             const repackResult = await repackCharxWithMergedModule(
                 newZip,
@@ -819,6 +823,9 @@ export const downloadCharxFile = async (data, filename, selectedMods = [], origi
             if (regularSlotMods.length > 0) {
                 mergeSlots(risuModule, regularSlotMods)
             }
+
+            // 채워지지 않은 슬롯 제거 (Lua 코드 내 리터럴 슬롯 잔존 방지)
+            removeUnusedSlots(risuModule)
 
             // module.risum 패킹 및 추가
             const packResult = await packToRisum(risuModule, [])
