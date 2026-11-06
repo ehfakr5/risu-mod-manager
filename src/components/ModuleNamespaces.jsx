@@ -2,11 +2,11 @@ import { useRef, useState } from 'react'
 
 const buttonClass = 'rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500'
 
-function download(module) {
+function download({ blob, filename }) {
     const link = document.createElement('a')
-    const url = URL.createObjectURL(module.blob)
+    const url = URL.createObjectURL(blob)
     link.href = url
-    link.download = module.filename
+    link.download = filename
     link.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
@@ -15,6 +15,8 @@ export default function ModuleNamespaces() {
     const [modules, setModules] = useState([])
     const [errors, setErrors] = useState([])
     const [busy, setBusy] = useState(false)
+    const [exporting, setExporting] = useState(false)
+    const [zipError, setZipError] = useState('')
     const [status, setStatus] = useState('')
     const fileInput = useRef(null)
     const codeField = useRef(null)
@@ -28,6 +30,7 @@ export default function ModuleNamespaces() {
         setBusy(true)
         setModules([])
         setErrors([])
+        setZipError('')
         setStatus('')
         const results = []
         const failures = []
@@ -55,6 +58,20 @@ export default function ModuleNamespaces() {
         }
     }
 
+    const downloadAll = async () => {
+        setExporting(true)
+        setZipError('')
+        try {
+            const { createStoredZip } = await import('../utils/storedZip')
+            const blob = await createStoredZip(modules)
+            download({ blob, filename: 'risu-image-modules.zip' })
+        } catch (error) {
+            setZipError(error.message)
+        } finally {
+            setExporting(false)
+        }
+    }
+
     const copy = async () => {
         try {
             await navigator.clipboard.writeText(code)
@@ -71,10 +88,18 @@ export default function ModuleNamespaces() {
             <summary className="cursor-pointer px-5 py-4 text-base font-semibold text-white">이미지 모듈 네임스페이스</summary>
             <div className="space-y-4 border-t border-gray-700 p-5">
                 <p className="text-sm">같이 쓸 이미지 모듈을 한 번에 선택해 주세요.</p>
-                <button type="button" disabled={busy} className={buttonClass + ' disabled:opacity-50'}
-                    onClick={() => fileInput.current?.click()}>RISUM 선택</button>
+                <div className="flex flex-wrap gap-2">
+                    <button type="button" disabled={busy || exporting} className={buttonClass + ' disabled:opacity-50'}
+                        onClick={() => fileInput.current?.click()}>RISUM 선택</button>
+                    {modules.length > 1 ? (
+                        <button type="button" disabled={exporting} className={buttonClass + ' disabled:opacity-50'} onClick={downloadAll}>
+                            {exporting ? 'ZIP 만드는 중…' : '전체 ZIP 다운로드'}
+                        </button>
+                    ) : null}
+                </div>
                 <input ref={fileInput} type="file" accept=".risum" multiple onChange={selectFiles} hidden aria-label="이미지 모듈 선택" />
                 {busy ? <p role="status" className="text-sm">모듈을 읽고 있어요.</p> : null}
+                {zipError ? <p role="alert" className="text-sm text-red-300">{zipError}</p> : null}
                 {errors.length ? (
                     <ul role="alert" className="space-y-1 break-all text-sm text-red-300">
                         {errors.map((error, index) => <li key={index}>{error}</li>)}
