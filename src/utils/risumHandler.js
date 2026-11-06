@@ -215,6 +215,68 @@ export const packToRisum = async (moduleData, assets = []) => {
   }
 }
 
+const namespaceForModule = async (id) => {
+  const uuid = id.replace(/^urn:uuid:/i, '').replace(/^\{(.*)\}$/, '$1').replaceAll('-', '')
+  if (/^[0-9a-f]{32}$/i.test(uuid)) return `ah-${uuid.toLowerCase()}`
+
+  // Match the desktop helper's UUIDv5 namespace for older non-UUID IDs.
+  const urlNamespace = Uint8Array.of(0x6b, 0xa7, 0xb8, 0x11, 0x9d, 0xad, 0x11, 0xd1,
+    0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8)
+  const name = new TextEncoder().encode(`risu-module:${id}`)
+  const input = new Uint8Array(urlNamespace.length + name.length)
+  input.set(urlNamespace)
+  input.set(name, urlNamespace.length)
+  const hash = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-1', input)).subarray(0, 16)
+  hash[6] = (hash[6] & 0x0f) | 0x50
+  hash[8] = (hash[8] & 0x3f) | 0x80
+  return `ah-${Array.from(hash, byte => byte.toString(16).padStart(2, '0')).join('')}`
+}
+
+export const createRisumNamespaceCopy = async (file) => {
+  const prefix = await file.slice(0, 6).arrayBuffer()
+  const view = new DataView(prefix)
+  if (prefix.byteLength !== 6 || view.getUint8(0) !== 111 || view.getUint8(1) !== 0) {
+    throw new Error('RISUM v0 파일을 선택해 주세요.')
+  }
+
+  const length = view.getUint32(2, true)
+  const offset = 6 + length
+  if (!length || length > 16 * 1024 * 1024 || offset >= file.size) {
+    throw new Error('모듈 헤더 길이가 올바르지 않아요.')
+  }
+
+  const packer = await initPacker()
+  const encoded = new Uint8Array(await file.slice(6, offset).arrayBuffer())
+  const header = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await packer.decodeRPack(encoded)))
+  const module = header?.module
+  if (header?.type !== 'risuModule' || typeof module?.id !== 'string' || !module.id.trim()) {
+    throw new Error('모듈 ID를 찾을 수 없어요.')
+  }
+  if (!Array.isArray(module.assets) || !module.assets.length) {
+    throw new Error('이 모듈에는 에셋이 없어요.')
+  }
+
+  const tail = file.slice(offset)
+  const end = new Uint8Array(await file.slice(-1).arrayBuffer())
+  if (tail.size < 5 * module.assets.length + 1 || end[0] !== 0) {
+    throw new Error('에셋 데이터가 잘렸거나 모듈 끝 표시가 올바르지 않아요.')
+  }
+  const originalNamespace = typeof module.namespace === 'string' ? module.namespace.trim() : ''
+  const namespace = await namespaceForModule(module.id)
+  module.namespace = namespace
+  const updated = await packer.encodeRPack(new TextEncoder().encode(JSON.stringify(header)))
+  view.setUint32(2, updated.length, true)
+
+  return {
+    name: module.name || file.name,
+    originalNamespace,
+    namespace,
+    assetCount: module.assets.length,
+    filename: file.name.replace(/\.risum$/i, '') + '.ah.risum',
+    blob: new Blob([prefix, updated, tail], { type: 'application/octet-stream' }),
+  }
+}
+
 // .charx 파일에서 module.risum을 찾아 언패킹
 export const extractModuleFromCharx = async (zipData) => {
   try {

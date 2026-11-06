@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import ModList from './components/ModList'
+import ModuleNamespaces from './components/ModuleNamespaces'
 import { processModFiles, readFileAsJson, parseOriginalItems } from './utils/fileHandler'
 import { mergeModsIntoOriginal, validateMergeResult, downloadCharxFile } from './utils/jsonMerger'
 import { extractAndDownloadMod } from './utils/extractorUtils'
@@ -531,6 +532,8 @@ function App() {
                         시뮬봇 모드 파일 관리 및 병합 도구
                     </p>
                 </div>
+
+                <ModuleNamespaces />
 
                 {/* Top Row - Upload sections */}
                 <div className="grid grid-cols-2 gap-6 mb-6">
