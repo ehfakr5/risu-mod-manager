@@ -64,5 +64,20 @@
     "separator": ""
 }
 ```
+
+#### 예약 슬롯
+- `<<lua>>`: 원본 트리거 Lua 코드 끝에 이어 붙음
+- `<<embedding>>`: 배경 HTML(backgroundHTML / backgroundEmbedding)의 `</style>` 앞에 삽입
+- `<<toggle>>`: 토글 모듈의 customModuleToggle 에 추가
+- `<<namespace>>`: 토글 모듈(별도 risum)의 namespace 로 사용. 원본 안의 `<<namespace>>` 텍스트도 같은 값으로 치환되며 토글 문법으로 감싸지 않음. 영문/숫자/`_`/`-` 만 허용, 여러 mod 가 서로 다른 값을 주면 오류
+
+```json
+{ "name": "namespace", "section": "slot", "slotname": "<<namespace>>", "content": ["AHMOD"] }
+```
+
+#### 에셋 mod
+- charx 로 내보낼 때 에셋 mod 의 이미지는 charx 가 아니라 토글 모듈(`*_토글_모듈.risum`)의 에셋으로 들어감
+- 토글 모듈에 namespace 가 있으면 `{{module_assetlist::<namespace>}}` 로 목록을 읽을 수 있음
+
 ## json 섹션 분류
 - json 파일의 목록은 

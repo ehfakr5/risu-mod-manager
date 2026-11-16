@@ -144,15 +144,14 @@ export const mergeModsIntoOriginal = async (originalData, selectedMods) => {
     // 슬롯 mod들을 마지막에 일괄 처리 (사전 정의 슬롯 제외)
     const slotMods = nonOriginalMods.filter(mod =>
         mod.section === 'slot' &&
-        mod.data.slotname !== '<<lua>>' &&
-        mod.data.slotname !== '<<toggle>>' &&
-        mod.data.slotname !== '<<embedding>>'
+        !isReservedSlot(mod.data.slotname)
     )
     if (slotMods.length > 0) {
         mergeSlots(dataRoot, slotMods)
     }
 
-    // 사용되지 않은 슬롯 제거
+    // <<namespace>> 예약 슬롯 치환 후 사용되지 않은 슬롯 제거
+    applyNamespaceSlot(dataRoot, resolveNamespace(nonOriginalMods))
     removeUnusedSlots(dataRoot)
 
     return result
@@ -174,15 +173,14 @@ const mergeRisuModule = async (originalData, selectedMods) => {
 
     const slotMods = flattenedSlotMods.filter(mod =>
         mod.section === 'slot' &&
-        mod.data.slotname !== '<<lua>>' &&
-        mod.data.slotname !== '<<toggle>>' &&
-        mod.data.slotname !== '<<embedding>>'
+        !isReservedSlot(mod.data.slotname)
     )
     if (slotMods.length > 0) {
         mergeSlots(mergedModule, slotMods)
     }
 
-    // 사용되지 않은 슬롯 제거
+    // <<namespace>> 예약 슬롯 치환 후 사용되지 않은 슬롯 제거
+    applyNamespaceSlot(mergedModule, resolveNamespace(selectedMods))
     removeUnusedSlots(mergedModule)
 
     // 병합된 모듈로 결과 업데이트
@@ -357,6 +355,37 @@ const replaceSlotInJsonMutating = (obj, slotname, replacement) => {
     }
 }
 
+// ── <<namespace>> 예약 슬롯 ──────────────────────────────────────
+// 토글 모듈(별도 risum)의 namespace 를 정한다. 일반 슬롯과 달리 토글 문법으로 감싸지 않고,
+// 원본 곳곳의 <<namespace>> 텍스트(예: Lua 의 {{module_assetlist::...}} 대상)도 같은 값으로 바꾼다.
+const NAMESPACE_SLOT = '<<namespace>>'
+const RESERVED_SLOTS = ['<<lua>>', '<<toggle>>', '<<embedding>>', NAMESPACE_SLOT]
+const isReservedSlot = (slotname) => RESERVED_SLOTS.includes(slotname)
+
+// 선택된 mod 들에서 namespace 값을 결정한다. 없으면 ''. 서로 다른 값이면 오류.
+export const resolveNamespace = (mods) => {
+    const values = []
+    flattenSlotMods(mods)
+        .filter(mod => mod.section === 'slot' && mod.data?.slotname === NAMESPACE_SLOT)
+        .forEach(mod => {
+            const value = (Array.isArray(mod.data.content) ? mod.data.content.join('') : String(mod.data.content || '')).trim()
+            if (value) values.push({ value, name: mod.data.name || mod.name })
+        })
+    const unique = [...new Set(values.map(v => v.value))]
+    if (unique.length > 1) {
+        throw new Error(`슬롯 '${NAMESPACE_SLOT}': 값 충돌 (${unique.map(v => `'${v}'`).join(', ')}) - mod: ${values.map(v => v.name).join(', ')}`)
+    }
+    const namespace = unique[0] || ''
+    if (namespace && !/^[A-Za-z0-9_-]+$/.test(namespace)) {
+        throw new Error(`슬롯 '${NAMESPACE_SLOT}': 영문/숫자/_/- 만 사용할 수 있습니다 ('${namespace}')`)
+    }
+    return namespace
+}
+
+const applyNamespaceSlot = (obj, namespace) => {
+    if (namespace) replaceSlotInJsonMutating(obj, NAMESPACE_SLOT, namespace)
+}
+
 // 사용되지 않은 슬롯 제거 함수
 // <<slotname>> 형식의 슬롯 패턴을 찾아서 제거 (공백 포함 가능, 줄바꿈 제외)
 // 참고: [[...]] 형식은 Lua 멀티라인 문자열 문법과 충돌하므로 제외
@@ -499,6 +528,9 @@ export const downloadCharxFile = async (data, filename, selectedMods = [], origi
             const flattenedMods = flattenSlotMods(selectedMods)
             const slotMods = flattenedMods.filter(mod => mod.section === 'slot')
 
+            // <<namespace>> 슬롯 (토글 모듈 namespace + 원본 내 <<namespace>> 치환)
+            const namespace = resolveNamespace(selectedMods)
+
             // <<lua>> 슬롯 수집 (trigger code용)
             const luaSlots = slotMods.filter(mod => mod.data.slotname === '<<lua>>')
             let luaCode = ''
@@ -600,15 +632,14 @@ export const downloadCharxFile = async (data, filename, selectedMods = [], origi
 
             // 일반 슬롯 mod들을 card.json에 적용 (사전 정의된 슬롯 제외)
             const regularSlotMods = slotMods.filter(mod =>
-                mod.data.slotname !== '<<lua>>' &&
-                mod.data.slotname !== '<<toggle>>' &&
-                mod.data.slotname !== '<<embedding>>'
+                !isReservedSlot(mod.data.slotname)
             )
             if (regularSlotMods.length > 0) {
                 mergeSlots(cardDataRoot, regularSlotMods)
             }
 
             // 사용되지 않은 슬롯 제거
+            applyNamespaceSlot(cardDataRoot, namespace)
             removeUnusedSlots(cardDataRoot)
 
             // 업데이트된 card.json 저장
@@ -652,6 +683,7 @@ export const downloadCharxFile = async (data, filename, selectedMods = [], origi
             }
 
             // 채워지지 않은 슬롯 제거 (Lua 코드 내 리터럴 슬롯 잔존 방지)
+            applyNamespaceSlot(charxModule, namespace)
             removeUnusedSlots(charxModule)
 
             const repackResult = await repackCharxWithMergedModule(
@@ -683,7 +715,8 @@ export const downloadCharxFile = async (data, filename, selectedMods = [], origi
                 regex: [],
                 trigger: [],
                 assets: toggleModuleAssets,
-                customModuleToggle: customModuleToggle
+                customModuleToggle: customModuleToggle,
+                ...(namespace ? { namespace } : {})
             }
             const emptyRisumResult = await packToRisum(separateModule, toggleModuleAssetBuffers)
 
@@ -711,6 +744,7 @@ export const downloadCharxFile = async (data, filename, selectedMods = [], origi
         // 먼저 모든 mod를 flatten하여 section이 내부에 있는 경우를 처리
         const flattenedMods = flattenSlotMods(selectedMods)
         const slotMods = flattenedMods.filter(mod => mod.section === 'slot')
+        const namespace = resolveNamespace(selectedMods)
 
         // <<embedding>> 슬롯 수집
         const embeddingSlots = slotMods.filter(mod => mod.data.slotname === '<<embedding>>')
@@ -745,6 +779,7 @@ export const downloadCharxFile = async (data, filename, selectedMods = [], origi
 
         // 사용되지 않은 슬롯 제거
         const cardDataRoot = cardDataToSave.spec === 'chara_card_v3' && cardDataToSave.data ? cardDataToSave.data : cardDataToSave
+        applyNamespaceSlot(cardDataRoot, namespace)
         removeUnusedSlots(cardDataRoot)
 
         // card.json 파일을 ZIP에 추가 (업데이트된 데이터 사용)
@@ -830,15 +865,14 @@ export const downloadCharxFile = async (data, filename, selectedMods = [], origi
 
             // risuModule에 슬롯 치환 적용 (<<lua>> content 안의 슬롯 처리)
             const regularSlotMods = slotMods.filter(mod =>
-                mod.data.slotname !== '<<lua>>' &&
-                mod.data.slotname !== '<<toggle>>' &&
-                mod.data.slotname !== '<<embedding>>'
+                !isReservedSlot(mod.data.slotname)
             )
             if (regularSlotMods.length > 0) {
                 mergeSlots(risuModule, regularSlotMods)
             }
 
             // 채워지지 않은 슬롯 제거 (Lua 코드 내 리터럴 슬롯 잔존 방지)
+            applyNamespaceSlot(risuModule, namespace)
             removeUnusedSlots(risuModule)
 
             // module.risum 패킹 및 추가
