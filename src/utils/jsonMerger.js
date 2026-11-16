@@ -503,17 +503,13 @@ export const downloadCharxFile = async (data, filename, selectedMods = [], origi
             const newZip = new JSZip.default()
 
             // 1. 기존 파일들 복사 (card.json 제외)
-            const copyPromises = []
+            // 원본 순서대로 등록한다(데이터는 Promise 로 넘김). 완료 순서대로 넣으면 작은 x_meta/*.json 이
+            // 앞쪽에 수천 개 몰려, RisuAI(fflate) 가 import 할 때 "Maximum call stack size exceeded" 가 난다.
             originalZipData.forEach((relativePath, zipEntry) => {
                 if (!zipEntry.dir && relativePath !== 'card.json' && relativePath !== 'module.risum') {
-                    copyPromises.push(
-                        zipEntry.async('uint8array').then(fileData => {
-                            newZip.file(relativePath, fileData)
-                        })
-                    )
+                    newZip.file(relativePath, zipEntry.async('uint8array'))
                 }
             })
-            await Promise.all(copyPromises)
 
             // 2. card.json 처리 - 에셋 mod 병합
             let cardJsonData = {}
@@ -920,7 +916,7 @@ export const downloadCharxFile = async (data, filename, selectedMods = [], origi
         }
 
         // ZIP 파일 생성
-        const zipBlob = await zip.generateAsync({ type: 'blob' })
+        const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } })
 
         // 파일명이 .charx로 끝나지 않으면 추가
         const charxFilename = filename.endsWith('.charx') ? filename : filename.replace(/\.json$/, '.charx')

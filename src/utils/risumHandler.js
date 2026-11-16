@@ -352,24 +352,19 @@ export const repackCharxWithMergedModule = async (originalZipData, mergedModule,
     const newZip = new JSZip.default()
 
     // 기존 파일들 복사 (module.risum 제외)
-    const copyPromises = []
+    // 원본 순서를 그대로 유지한다(데이터는 Promise 로 넘김). 완료 순서대로 넣으면 작은 x_meta/*.json 이
+    // 앞쪽에 몰려 RisuAI(fflate) import 시 "Maximum call stack size exceeded" 가 난다.
     originalZipData.forEach((relativePath, zipEntry) => {
       if (relativePath !== 'module.risum' && !zipEntry.dir) {
-        copyPromises.push(
-          zipEntry.async('uint8array').then(data => {
-            newZip.file(relativePath, data)
-          })
-        )
+        newZip.file(relativePath, zipEntry.async('uint8array'))
       }
     })
-
-    await Promise.all(copyPromises)
 
     // 새로운 module.risum 추가
     newZip.file('module.risum', packResult.buffer)
 
-    // ZIP 생성
-    const newCharxBuffer = await newZip.generateAsync({ type: 'uint8array' })
+    // ZIP 생성 (RisuAI 가 내보내는 charx 와 같이 DEFLATE)
+    const newCharxBuffer = await newZip.generateAsync({ type: 'uint8array', compression: 'DEFLATE', compressionOptions: { level: 6 } })
 
     return {
       success: true,
