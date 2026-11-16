@@ -390,6 +390,44 @@ const getFileExtension = (filename) => {
     return parts.length > 1 ? parts[parts.length - 1] : 'png'
 }
 
+// 에셋 mod의 이미지들을 risum 에셋 형식으로 모은다.
+// 반환: { assets: [[assetname, '', ext], ...], buffers: [Uint8Array, ...] } (같은 순서)
+// 같은 assetname이 여러 번 나오면 먼저 선택된 mod의 것을 쓴다.
+export const collectAssetModFiles = async (assetMods) => {
+    const assets = []
+    const buffers = []
+    const seen = new Set()
+    for (const mod of assetMods) {
+        if (!mod.zipData || !Array.isArray(mod.data?.content)) continue
+        for (const assetItem of mod.data.content) {
+            if (!assetItem?.filename || !assetItem?.assetname) continue
+            if (seen.has(assetItem.assetname)) {
+                console.warn(`에셋 이름 중복, 건너뜀: ${assetItem.assetname} (${mod.name})`)
+                continue
+            }
+            // 기본 위치는 assets/<filename>. 자동 생성된 에셋 mod는 파일명만 갖고 있으므로
+            // 하위 폴더에 있으면 assetFiles에서 같은 파일명을 찾는다.
+            let file = mod.zipData.file(`assets/${assetItem.filename}`)
+            if (!file && Array.isArray(mod.assetFiles)) {
+                const hit = mod.assetFiles.find(f => f.path.split('/').pop() === assetItem.filename)
+                if (hit) file = mod.zipData.file(hit.path)
+            }
+            if (!file) {
+                console.warn(`에셋 파일 없음: assets/${assetItem.filename} (${mod.name})`)
+                continue
+            }
+            try {
+                buffers.push(await file.async('uint8array'))
+                assets.push([assetItem.assetname, '', getFileExtension(assetItem.filename)])
+                seen.add(assetItem.assetname)
+            } catch (error) {
+                console.warn(`에셋 파일 ${assetItem.filename} 읽기 실패:`, error)
+            }
+        }
+    }
+    return { assets, buffers }
+}
+
 // JSON 문자열로 안전하게 변환하는 함수
 const createJSONStringWithPreservedHTML = (data) => {
     // JSON.stringify는 이미 모든 특수문자를 올바르게 이스케이핑하므로
@@ -554,21 +592,11 @@ export const downloadCharxFile = async (data, filename, selectedMods = [], origi
                 cardDataRoot.assets = []
             }
 
-            // 에셋 mod들을 card.json에 병합
+            // 에셋 mod들은 charx(card.json / assets/mod/)가 아니라 별도 토글 모듈(risum)에 담는다.
+            // risum 에셋 형식: module.assets = [[이름, uri, 확장자], ...] + 같은 순서의 바이너리 목록
             const assetMods = selectedMods.filter(mod => mod.section === 'asset')
-            assetMods.forEach(mod => {
-                if (mod.data.content && Array.isArray(mod.data.content)) {
-                    mod.data.content.forEach((assetItem) => {
-                        const asset = {
-                            type: 'x-risu-asset',
-                            uri: `embeded://assets/mod/${assetItem.filename}`,
-                            name: assetItem.assetname,
-                            ext: getFileExtension(assetItem.filename)
-                        }
-                        cardDataRoot.assets.push(asset)
-                    })
-                }
-            })
+            const { assets: toggleModuleAssets, buffers: toggleModuleAssetBuffers } =
+                await collectAssetModFiles(assetMods)
 
             // 일반 슬롯 mod들을 card.json에 적용 (사전 정의된 슬롯 제외)
             const regularSlotMods = slotMods.filter(mod =>
@@ -587,22 +615,7 @@ export const downloadCharxFile = async (data, filename, selectedMods = [], origi
             const cardJsonString = createJSONStringWithPreservedHTML(cardJsonData)
             newZip.file('card.json', cardJsonString)
 
-            // 3. 에셋 파일들을 assets/mod/에 추가
-            for (const assetMod of assetMods) {
-                if (assetMod.assetFiles && assetMod.zipData) {
-                    for (const assetFile of assetMod.assetFiles) {
-                        try {
-                            const imageData = await assetMod.zipData.file(assetFile.path).async('uint8array')
-                            const filename = assetFile.path.replace('assets/', '') // assets/ 제거
-                            newZip.file(`assets/mod/${filename}`, imageData)
-                        } catch (error) {
-                            console.warn(`에셋 파일 ${assetFile.path} 추가 실패:`, error)
-                        }
-                    }
-                }
-            }
-
-            // 4. module.risum 재패킹 (charx용 - trigger 및 regex 추가)
+            // 3. module.risum 재패킹 (charx용 - trigger 및 regex 추가)
             // regex mod들 수집 (data 배열만 추출)
             const regexMods = selectedMods.filter(mod => mod.data?.type === 'regex')
             const regexEntries = []
@@ -662,16 +675,17 @@ export const downloadCharxFile = async (data, filename, selectedMods = [], origi
             document.body.removeChild(link)
             URL.revokeObjectURL(url)
 
-            // 별도의 토글 모듈 파일 다운로드 (lorebook, regex, trigger 비우고 customModuleToggle만 추가)
+            // 별도의 토글 모듈 파일 다운로드 (lorebook, regex, trigger 비우고 customModuleToggle + 에셋 mod 이미지)
             const { packToRisum } = await import('./risumHandler.js')
             const separateModule = {
                 ...data.risuModule,
                 lorebook: [],
                 regex: [],
                 trigger: [],
+                assets: toggleModuleAssets,
                 customModuleToggle: customModuleToggle
             }
-            const emptyRisumResult = await packToRisum(separateModule, [])
+            const emptyRisumResult = await packToRisum(separateModule, toggleModuleAssetBuffers)
 
             if (emptyRisumResult.success) {
                 const risumFilename = charxFilename.replace(/\.charx$/, '') + '_토글_모듈.risum'
